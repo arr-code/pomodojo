@@ -4,7 +4,11 @@ import { useLocalStorage } from './useLocalStorage';
 import { useAudio } from './useAudio';
 import { DEFAULT_TIMER_CONFIG, STORAGE_KEYS } from '@/lib/constants';
 
-export function useTimer() {
+interface UseTimerProps {
+  onFocusSessionComplete?: (sessionNumber: number) => void;
+}
+
+export function useTimer({ onFocusSessionComplete }: UseTimerProps = {}) {
   const [config, setConfig] = useLocalStorage<TimerConfig>(
     STORAGE_KEYS.TIMER_CONFIG,
     DEFAULT_TIMER_CONFIG
@@ -46,21 +50,30 @@ export function useTimer() {
   const handleSessionComplete = useCallback(() => {
     playNotification();
     
-    setTimerState(prev => ({
-      ...prev,
-      status: 'completed',
-      totalSessions: prev.sessionType === 'focus' ? prev.totalSessions + 1 : prev.totalSessions,
-    }));
+    setTimerState(prev => {
+      const newTotalSessions = prev.sessionType === 'focus' ? prev.totalSessions + 1 : prev.totalSessions;
+      
+      // Call the callback for focus session completion
+      if (prev.sessionType === 'focus' && onFocusSessionComplete) {
+        onFocusSessionComplete(newTotalSessions);
+      }
+      
+      return {
+        ...prev,
+        status: 'completed',
+        totalSessions: newTotalSessions,
+      };
+    });
 
     // Send browser notification
     if ('Notification' in window && Notification.permission === 'granted') {
       const sessionName = timerState.sessionType === 'focus' ? 'Focus' : 'Break';
       new Notification(`${sessionName} session completed!`, {
         body: 'Ready for the next session?',
-        icon: '/icons/icon-192x192.png',
+        icon: '/pomodojo.png',
       });
     }
-  }, [timerState.sessionType, playNotification]);
+  }, [timerState.sessionType, playNotification, onFocusSessionComplete]);
 
   // Update timer state when config changes
   useEffect(() => {
@@ -110,7 +123,6 @@ export function useTimer() {
   }, []);
 
   const resetTimer = useCallback(() => {
-    // Clear any running interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -127,10 +139,14 @@ export function useTimer() {
   }, [config, getSessionDuration]);
 
   const skipSession = useCallback(() => {
-    // Clear any running interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
+    }
+    
+    // If skipping a focus session, count it as completed for todo progress
+    if (timerState.sessionType === 'focus' && onFocusSessionComplete) {
+      onFocusSessionComplete(timerState.totalSessions + 1);
     }
     
     const nextSessionType = getNextSessionType();
@@ -146,10 +162,9 @@ export function useTimer() {
       timeRemaining: getSessionDuration(nextSessionType, config) * 60,
       totalSessions: prev.sessionType === 'focus' ? prev.totalSessions + 1 : prev.totalSessions,
     }));
-  }, [timerState.sessionType, timerState.currentSession, config, getNextSessionType, getSessionDuration]);
+  }, [timerState.sessionType, timerState.currentSession, timerState.totalSessions, config, getNextSessionType, getSessionDuration, onFocusSessionComplete]);
 
   const startNextSession = useCallback(() => {
-    // Clear any running interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;

@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   SESSION_STATS: 'pomodoro_stats',
   THEME: 'pomodoro_theme',
   SOUND_ENABLED: 'pomodoro_sound',
+  TODOS: 'pomodoro_todos',
 } as const;
 
 export const KEYBOARD_SHORTCUTS = {
