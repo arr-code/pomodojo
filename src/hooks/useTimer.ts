@@ -22,6 +22,46 @@ export function useTimer() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { playNotification } = useAudio();
 
+  const getSessionDuration = useCallback((sessionType: SessionType, config: TimerConfig): number => {
+    switch (sessionType) {
+      case 'focus':
+        return config.focusTime;
+      case 'break':
+        return config.shortBreak;
+      case 'longBreak':
+        return config.longBreak;
+      default:
+        return config.focusTime;
+    }
+  }, []);
+
+  const getNextSessionType = useCallback((): SessionType => {
+    if (timerState.sessionType === 'focus') {
+      const isLongBreakTime = timerState.currentSession % config.sessionsUntilLongBreak === 0;
+      return isLongBreakTime ? 'longBreak' : 'break';
+    }
+    return 'focus';
+  }, [timerState.sessionType, timerState.currentSession, config.sessionsUntilLongBreak]);
+
+  const handleSessionComplete = useCallback(() => {
+    playNotification();
+    
+    setTimerState(prev => ({
+      ...prev,
+      status: 'completed',
+      totalSessions: prev.sessionType === 'focus' ? prev.totalSessions + 1 : prev.totalSessions,
+    }));
+
+    // Send browser notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const sessionName = timerState.sessionType === 'focus' ? 'Focus' : 'Break';
+      new Notification(`${sessionName} session completed!`, {
+        body: 'Ready for the next session?',
+        icon: '/icons/icon-192x192.png',
+      });
+    }
+  }, [timerState.sessionType, playNotification]);
+
   // Update timer state when config changes
   useEffect(() => {
     if (timerState.status === 'idle') {
@@ -31,7 +71,7 @@ export function useTimer() {
         timeRemaining: getSessionDuration(prev.sessionType, config) * 60,
       }));
     }
-  }, [config, timerState.status]);
+  }, [config, timerState.status, getSessionDuration]);
 
   // Timer countdown logic
   useEffect(() => {
@@ -59,47 +99,7 @@ export function useTimer() {
     if (timerState.status === 'running' && timerState.timeRemaining === 0) {
       handleSessionComplete();
     }
-  }, [timerState.timeRemaining, timerState.status]);
-
-  const getSessionDuration = (sessionType: SessionType, config: TimerConfig): number => {
-    switch (sessionType) {
-      case 'focus':
-        return config.focusTime;
-      case 'break':
-        return config.shortBreak;
-      case 'longBreak':
-        return config.longBreak;
-      default:
-        return config.focusTime;
-    }
-  };
-
-  const getNextSessionType = (): SessionType => {
-    if (timerState.sessionType === 'focus') {
-      const isLongBreakTime = timerState.currentSession % config.sessionsUntilLongBreak === 0;
-      return isLongBreakTime ? 'longBreak' : 'break';
-    }
-    return 'focus';
-  };
-
-  const handleSessionComplete = useCallback(() => {
-    playNotification();
-    
-    setTimerState(prev => ({
-      ...prev,
-      status: 'completed',
-      totalSessions: prev.sessionType === 'focus' ? prev.totalSessions + 1 : prev.totalSessions,
-    }));
-
-    // Send browser notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const sessionName = timerState.sessionType === 'focus' ? 'Focus' : 'Break';
-      new Notification(`${sessionName} session completed!`, {
-        body: 'Ready for the next session?',
-        icon: '/icons/icon-192x192.png',
-      });
-    }
-  }, [timerState.sessionType, playNotification]);
+  }, [timerState.timeRemaining, timerState.status, handleSessionComplete]);
 
   const startTimer = useCallback(() => {
     setTimerState(prev => ({ ...prev, status: 'running' }));
@@ -110,14 +110,29 @@ export function useTimer() {
   }, []);
 
   const resetTimer = useCallback(() => {
-    setTimerState(prev => ({
-      ...prev,
-      status: 'idle',
-      timeRemaining: getSessionDuration(prev.sessionType, config) * 60,
-    }));
-  }, [config]);
+    // Clear any running interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
+    setTimerState(prev => {
+      const correctDuration = getSessionDuration(prev.sessionType, config);
+      return {
+        ...prev,
+        status: 'idle',
+        timeRemaining: correctDuration * 60,
+      };
+    });
+  }, [config, getSessionDuration]);
 
   const skipSession = useCallback(() => {
+    // Clear any running interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
     const nextSessionType = getNextSessionType();
     const nextSession = timerState.sessionType === 'focus' 
       ? timerState.currentSession + 1 
@@ -131,9 +146,15 @@ export function useTimer() {
       timeRemaining: getSessionDuration(nextSessionType, config) * 60,
       totalSessions: prev.sessionType === 'focus' ? prev.totalSessions + 1 : prev.totalSessions,
     }));
-  }, [timerState.sessionType, timerState.currentSession, config]);
+  }, [timerState.sessionType, timerState.currentSession, config, getNextSessionType, getSessionDuration]);
 
   const startNextSession = useCallback(() => {
+    // Clear any running interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
     const nextSessionType = getNextSessionType();
     const nextSession = timerState.sessionType === 'break' || timerState.sessionType === 'longBreak'
       ? timerState.currentSession + 1 
@@ -146,7 +167,7 @@ export function useTimer() {
       currentSession: nextSession,
       timeRemaining: getSessionDuration(nextSessionType, config) * 60,
     }));
-  }, [timerState.sessionType, timerState.currentSession, config]);
+  }, [timerState.sessionType, timerState.currentSession, config, getNextSessionType, getSessionDuration]);
 
   const updateConfig = useCallback((newConfig: Partial<TimerConfig>) => {
     const updatedConfig = { ...config, ...newConfig };

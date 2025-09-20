@@ -1,5 +1,4 @@
 import { TimerState } from '@/types/timer';
-import { Button } from '@/components/ui/Button';
 
 interface TimerControlsProps {
   timerState: TimerState;

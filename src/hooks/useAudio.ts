@@ -2,13 +2,22 @@ import { useRef, useCallback } from 'react';
 import { useLocalStorage } from './useLocalStorage';
 import { STORAGE_KEYS } from '@/lib/constants';
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 export function useAudio() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const [soundEnabled] = useLocalStorage(STORAGE_KEYS.SOUND_ENABLED, true);
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current && typeof window !== 'undefined') {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        audioContextRef.current = new AudioContextClass();
+      }
     }
     return audioContextRef.current;
   }, []);

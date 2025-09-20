@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { Button } from './Button';
 
 interface ModalProps {
   isOpen: boolean;
@@ -9,7 +8,7 @@ interface ModalProps {
   className?: string;
 }
 
-export function Modal({ isOpen, onClose, title, children, className }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children }: ModalProps) {
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
